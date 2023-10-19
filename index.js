@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) =>{
-    res.send('j')
+    res.send('Elegance Ensemble Server is Running')
 })
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.kxy8ozq.mongodb.net/?retryWrites=true&w=majority`;
@@ -26,12 +26,7 @@ async function run() {
   try {
     await client.connect();
     const productCollection = client.db('productDB').collection('product');
-
-    app.get('/product', async(req, res)=>{
-        const cur = productCollection.find();
-        const result = await cur.toArray();
-        res.send(result);
-    })
+    const cartCollection = client.db('productDB').collection('cart');
 
     app.get('/product/:brand', async (req, res)=>{
         const myBrand = req.params.brand;
@@ -39,7 +34,6 @@ async function run() {
             'brand': myBrand,
         });
         const result = await cursor.toArray();
-        console.log(result)
         res.send(result);
     } )
 
@@ -65,19 +59,85 @@ async function run() {
 
     app.post('/product', async(req, res)=>{
         const newProduct = req.body;
-        console.log(newProduct);
         const result = await productCollection.insertOne(newProduct);
         res.send(result);
     })
+
+    app.post('/add-to-cart', async(req, res)=>{
+        const id = req.query.id;
+        const email = req.query.email;
+        const exist = await cartCollection.findOne({
+            'email':email
+        })
+        if(exist){
+            const {cart} =exist;
+            if(cart.includes(id)){
+                res.send({message: 'Product already added', success:false}); 
+                return
+            }
+            const query = {email : email}
+            const updateDoc = {
+                $set:{
+                    cart: [
+                        ...cart, id
+                    ]
+                }
+            }
+            const result = await cartCollection.updateOne(query, updateDoc, {upsert: true});
+            res.send({message: 'Cart updated Successfully', success:true}); 
+        }
+
+        else{
+            const newCart = {
+                email : email,
+                cart: [id]
+            };
+            const result = await cartCollection.insertOne(newCart);
+            res.send({message: 'New cart created', success: true}); 
+        }
+
+    })
+
+    app.delete('/delete-from-cart', async(req, res)=>{
+        const id = req.query.id;
+        const email = req.query.email;
+        const exist = await cartCollection.findOne({
+            'email':email
+        })
+            const {cart} =exist;
+            const query = {email : email}
+            const remaining = cart.filter(item=>item!==id)
+            if(remaining.length >0){
+                const updateDoc = {
+                    $set:{
+                        cart: [
+                            ...remaining
+                        ]
+                    }
+                }
+                const result = await cartCollection.updateOne(query, updateDoc, {upsert: true});
+                res.send({message: 'Product Removed Successfully', success:true}); 
+            }
+            else{
+                const result = await cartCollection.deleteOne(query)
+                res.send({message: 'Cart Cleared Successfully', success:true}); 
+            }
+        })
     
-    app.get('/product/:id', async (req, res)=>{
-        const id = req.params.id;
+    app.get('/single-product', async (req, res)=>{
+        const id = req.query.id;
         const query = {_id: new ObjectId(id)};
-        const result = await productCollection.findOne(query);
-        // const result = await cursor.toArray();
-        console.log(result)
+        const result =  await productCollection.findOne(query);
         res.send(result);
     } )
+
+    app.get('/my-cart', async(req, res)=>{
+        const email = req.query.email;
+        const query = {email:email}
+        const result = await cartCollection.findOne(query);
+        res.send(result)
+
+    })
 
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
