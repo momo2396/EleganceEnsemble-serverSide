@@ -24,7 +24,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
     const productCollection = client.db('productDB').collection('product');
     const cartCollection = client.db('productDB').collection('cart');
 
@@ -134,7 +133,7 @@ async function run() {
     app.get('/my-cart', async(req, res)=>{
         const email = req.query.email;
         const query = {email:email}
-        const result = await cartCollection.find({}).toArray();
+        const result = await cartCollection.findOne(query);
         console.log(result)
         if(result) res.send(result)
         else res.send({success:false})
@@ -151,6 +150,8 @@ async function run() {
 run().catch(console.dir);
 
 
-app.listen(port, ()=>{
+app.listen(port,  ()=>{
+    client.connect(err => {if (err) console.log(err); 
+        else console.log('DB connection established')     });
     console.log(`port: ${port}`)
 })
